@@ -58,7 +58,7 @@ class AbstractAttributes
    * Used as key in constructor function pointer maps in AttributesManagers.
    */
   std::string getClassKey() const override {
-    return get<std::string>("attributesClassKey");
+    return get<std::string>("__attributesClassKey");
   }
 
   /**
@@ -75,7 +75,7 @@ class AbstractAttributes
    * found.
    */
   void setFileDirectory(const std::string& fileDirectory) override {
-    set("fileDirectory", fileDirectory);
+    setHidden("__fileDirectory", fileDirectory);
   }
 
   /**
@@ -83,7 +83,7 @@ class AbstractAttributes
    * found.
    */
   std::string getFileDirectory() const override {
-    return get<std::string>("fileDirectory");
+    return get<std::string>("__fileDirectory");
   }
 
   /**
@@ -91,7 +91,7 @@ class AbstractAttributes
    * recently save this ManagedObject.
    */
   void setActualFilename(const std::string& fullFileName) override {
-    set("actualFilename", fullFileName);
+    setHidden("__actualFilename", fullFileName);
   }
 
   /**
@@ -99,14 +99,14 @@ class AbstractAttributes
    * recently save this ManagedObject.
    */
   std::string getActualFilename() const override {
-    return get<std::string>("actualFilename");
+    return get<std::string>("__actualFilename");
   }
 
   /**
    *  @brief Unique ID referencing attributes
    */
-  void setID(int ID) override { set("ID", ID); }
-  int getID() const override { return get<int>("ID"); }
+  void setID(int ID) override { setHidden("__ID", ID); }
+  int getID() const override { return get<int>("__ID"); }
 
   /**
    * @brief Gets a smart pointer reference to a copy of the user-specified
@@ -159,7 +159,7 @@ class AbstractAttributes
    */
   std::string getObjectInfo() const override {
     return Cr::Utility::formatString("{},{},{}", getSimplifiedHandle(),
-                                     getAsString("ID"),
+                                     getAsString("__ID"),
                                      getObjectInfoInternal());
   }
 
@@ -291,7 +291,7 @@ class AbstractAttributes
    * constructors used to make copies of this object in copy constructor map.
    */
   void setClassKey(const std::string& attributesClassKey) override {
-    set("attributesClassKey", attributesClassKey);
+    setHidden("__attributesClassKey", attributesClassKey);
   }
 
  public:
@@ -385,7 +385,7 @@ std::shared_ptr<T> AbstractAttributes::removeNamedSubAttributesInternal(
           typeid(obj).name(), obj->getAsString("handle")),
       nullptr);
   // queue available ID
-  availableIDs.emplace_front(obj->get<int>("ID"));
+  availableIDs.emplace_front(obj->get<int>("__ID"));
   return objPtr;
 
 }  // AbstractAttributes::removeNamedSubAttributesInternal
@@ -423,6 +423,10 @@ template <class T>
 void AbstractAttributes::copySubconfigIntoMe(
     const std::shared_ptr<Configuration>& srcSubAttrConfig,
     const std::shared_ptr<Configuration>& destSubAttrConfig) {
+  static_assert(
+      std::is_base_of<AbstractAttributes, T>::value,
+      "AbstractAttributes : Desired subconfig type must be derived from "
+      "esp::metadata::AbstractAttributes");
   // copy configs from srcSubAttrConfig into destSubAttrConfig, with appropriate
   // casting
 
