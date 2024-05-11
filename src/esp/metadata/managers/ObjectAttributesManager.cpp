@@ -16,11 +16,10 @@ namespace Cr = Corrade;
 
 namespace esp {
 
-using assets::AssetType;
-
 namespace metadata {
 
 using attributes::AbstractObjectAttributes;
+using attributes::AssetType;
 using attributes::ObjectAttributes;
 namespace managers {
 
@@ -46,7 +45,7 @@ ObjectAttributesManager::createPrimBasedAttributesTemplate(
   primObjectAttributes->setScale({0.1, 0.1, 0.1});
 
   // set render mesh handle
-  int primType = static_cast<int>(AssetType::PRIMITIVE);
+  int primType = static_cast<int>(AssetType::Primitive);
   primObjectAttributes->setRenderAssetType(primType);
   // set collision mesh/primitive handle and default for primitives to not use
   // mesh collisions
@@ -199,10 +198,10 @@ void ObjectAttributesManager::setDefaultAssetNameBasedAttributes(
     const std::function<void(int)>& assetTypeSetter) {
   if (this->isValidPrimitiveAttributes(meshHandle)) {
     // value is valid primitive, and value is different than existing value
-    assetTypeSetter(static_cast<int>(AssetType::PRIMITIVE));
+    assetTypeSetter(static_cast<int>(AssetType::Primitive));
   } else {
     // use unknown for object mesh types of non-primitives
-    assetTypeSetter(static_cast<int>(AssetType::UNKNOWN));
+    assetTypeSetter(static_cast<int>(AssetType::Unknown));
   }
   if (setFrame) {
     attributes->setOrientUp({0, 1, 0});
@@ -210,7 +209,8 @@ void ObjectAttributesManager::setDefaultAssetNameBasedAttributes(
   }
 }  // ObjectAttributesManager::setDefaultAssetNameBasedAttributes
 
-int ObjectAttributesManager::registerObjectFinalize(
+core::managedContainers::ManagedObjectPreregistration
+ObjectAttributesManager::preRegisterObjectFinalize(
     ObjectAttributes::ptr objectTemplate,
     const std::string& objectTemplateHandle,
     bool forceRegistration) {
@@ -219,28 +219,27 @@ int ObjectAttributesManager::registerObjectFinalize(
         << "Attributes template named `" << objectTemplateHandle
         << "` does not have a valid render asset handle specified, so "
            "registration is aborted.";
-    return ID_UNDEFINED;
+    return core::managedContainers::ManagedObjectPreregistration::Failed;
   }
 
-  // create a ref to the partition map of either prims or file-based objects to
-  // place a ref to the object template being regsitered
-  std::unordered_map<int, std::string>* mapToUse = nullptr;
   // Handles for rendering and collision assets
   std::string renderAssetHandle = objectTemplate->getRenderAssetHandle();
   std::string collisionAssetHandle = objectTemplate->getCollisionAssetHandle();
+  // Clear map to add to ptr from previous registration
+  mapToAddTo_ = nullptr;
 
   if (this->isValidPrimitiveAttributes(renderAssetHandle)) {
     // If renderAssetHandle corresponds to valid/existing primitive attributes
     // then setRenderAssetIsPrimitive to true and set map of IDs->Names to
     // physicsSynthObjTmpltLibByID_
     objectTemplate->setRenderAssetIsPrimitive(true);
-    mapToUse = &physicsSynthObjTmpltLibByID_;
+    mapToAddTo_ = &physicsSynthObjTmpltLibByID_;
   } else if (Cr::Utility::Path::exists(renderAssetHandle)) {
     // Check if renderAssetHandle is valid file name and is found in file system
     // - if so then setRenderAssetIsPrimitive to false and set map of IDs->Names
     // to physicsFileObjTmpltLibByID_ - verify file  exists
     objectTemplate->setRenderAssetIsPrimitive(false);
-    mapToUse = &physicsFileObjTmpltLibByID_;
+    mapToAddTo_ = &physicsFileObjTmpltLibByID_;
   } else if (forceRegistration) {
     // Forcing registration in case of computationaly generated assets
     ESP_WARNING(Mn::Debug::Flag::NoSpace)
@@ -260,7 +259,7 @@ int ObjectAttributesManager::registerObjectFinalize(
         << objectTemplateHandle
         << "` does not correspond to any existing file or primitive render "
            "asset, so registration is aborted.";
-    return ID_UNDEFINED;
+    return core::managedContainers::ManagedObjectPreregistration::Failed;
   }
 
   if (this->isValidPrimitiveAttributes(collisionAssetHandle)) {
@@ -288,16 +287,16 @@ int ObjectAttributesManager::registerObjectFinalize(
   // Clear dirty flag from when asset handles are changed
   objectTemplate->setIsClean();
 
-  // Add object template to template library
-  int objectTemplateID =
-      this->addObjectToLibrary(std::move(objectTemplate), objectTemplateHandle);
+  return core::managedContainers::ManagedObjectPreregistration::Success;
+}  // ObjectAttributesManager::preRegisterObjectFinalize
 
-  if (mapToUse != nullptr) {
-    mapToUse->emplace(objectTemplateID, objectTemplateHandle);
+void ObjectAttributesManager::postRegisterObjectHandling(
+    int objectTemplateID,
+    const std::string& objectTemplateHandle) {
+  if (mapToAddTo_ != nullptr) {
+    mapToAddTo_->emplace(objectTemplateID, objectTemplateHandle);
   }
-
-  return objectTemplateID;
-}  // ObjectAttributesManager::registerObjectFinalize
+}  // ObjectAttributesManager::postRegisterObjectHandling
 
 }  // namespace managers
 }  // namespace metadata

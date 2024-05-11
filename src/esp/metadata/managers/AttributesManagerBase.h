@@ -194,6 +194,26 @@ class AttributesManager : public ManagedFileBasedContainer<T, Access> {
    */
   bool parseUserDefinedJsonVals(
       const attributes::AbstractAttributes::ptr& attribs,
+      const io::JsonGenericValue& jsonConfig) const {
+    return this->parseSubconfigJsonVals("user_defined", attribs, jsonConfig);
+  }  // AttributesManager<T, Access>::parseUserDefinedJsonVals
+
+  /**
+   * @brief This function takes the passed json block @p jsonConfig, looks for
+   * @p subGroupName , and if found in json document and referencing an
+   * appropriately formatted object, will load the found values into a
+   * subconfig, keyed by
+   * @p subGroupName , placed into @p attribs ' subconfig tree.
+   * @param subGroupName The name of the target subgroup in the json document.
+   * Will also be the key of the resultant subconfig.
+   * @param attribs (out) an existing attributes to be modified.
+   * @param jsonConfig json document to parse
+   * @return true if tag is found, of appropriate configuration, and holds
+   * actual values.
+   */
+  bool parseSubconfigJsonVals(
+      const std::string& subGroupName,
+      const attributes::AbstractAttributes::ptr& attribs,
       const io::JsonGenericValue& jsonConfig) const;
 
   /**
@@ -262,7 +282,7 @@ class AttributesManager : public ManagedFileBasedContainer<T, Access> {
   /**
    * @brief Set a filename attribute to hold the appropriate data if the
    * existing attribute's given path contains the sentinel tag value defined at
-   * @ref esp::metadata::CONFIG_NAME_AS_ASSET_FILENAME. This will be called from
+   * @ref esp::metadata::CONFIG_NAME_AS_ASSET_FILENAME. This will be specified in
    * the Scene Dataset configuration file in the "default_attributes" tag for
    * any attributes which consume file names to specify that the name specified
    * as the instanced attributes should also be used to build the name of the
@@ -277,7 +297,9 @@ class AttributesManager : public ManagedFileBasedContainer<T, Access> {
    *
    * This will only be called from the specified manager's initNewObjectInternal
    * function, where the attributes is initially built from a default attributes
-   * (if such an attributes exists).
+   * (if such an attributes exists), since it is only within the default
+   * attributes that the tag in question would be specified.
+   *
    * @param attributes The AbstractAttributes being worked with.
    * @param srcAssetFilename The given asset's stored filename to be queried for
    * the specified tag. If the tag exists, replace it with the simplified handle
@@ -514,11 +536,11 @@ auto AttributesManager<T, Access>::createFromJsonOrDefaultInternal(
 }  // AttributesManager<T, Access>::createFromJsonFileOrDefaultInternal
 
 template <class T, ManagedObjectAccess Access>
-bool AttributesManager<T, Access>::parseUserDefinedJsonVals(
+bool AttributesManager<T, Access>::parseSubconfigJsonVals(
+    const std::string& subGroupName,
     const attributes::AbstractAttributes::ptr& attribs,
     const io::JsonGenericValue& jsonConfig) const {
-  const std::string subGroupName = "user_defined";
-  // check for user defined attributes and verify it is an object
+  // check for subGroupName tagged-json value and verify it is an object
   io::JsonGenericValue::ConstMemberIterator jsonIter =
       jsonConfig.FindMember(subGroupName.c_str());
   if (jsonIter != jsonConfig.MemberEnd()) {
@@ -526,27 +548,30 @@ bool AttributesManager<T, Access>::parseUserDefinedJsonVals(
       ESP_WARNING(Mn::Debug::Flag::NoSpace)
           << "<" << this->objectType_
           << "> : " << attribs->getSimplifiedHandle()
-          << " attributes specifies user_defined attributes but their format "
-             "is incorrect, so no user_defined attributes are loaded.";
+          << " attributes specifies `" << subGroupName
+          << "` attributes but their format is incorrect (is not a JSON "
+             "object), so no `"
+          << subGroupName << "` configuration values will be loaded.";
       return false;
     } else {
-      // get pointer to user_defined subgroup configuration
+      // get pointer to subGroupName-specified subgroup configuration
       std::shared_ptr<Configuration> subGroupPtr =
-          attribs->getUserConfiguration();
+          attribs->getSubconfigCopy<Configuration>(subGroupName);
+
       // get json object referenced by tag subGroupName
       const io::JsonGenericValue& jsonObj = jsonIter->value;
 
-      // count number of valid user config settings found
+      // count number of valid sub-config settings found
       int numConfigSettings = subGroupPtr->loadFromJson(jsonObj);
 
-      // save as user_defined subgroup configuration
+      // save with requested tag as subgroup configuration
       attribs->setSubconfigPtr(subGroupName, subGroupPtr);
 
       return (numConfigSettings > 0);
     }
-  }  // if has user_defined tag
+  }  // if has reqyested tag
   return false;
-}  // AttributesManager<T, Access>::parseUserDefinedJsonVals
+}  // AttributesManager<T, Access>::parseSubconfigJsonVals
 
 template <class T, ManagedObjectAccess Access>
 bool AttributesManager<T, Access>::setFilenameFromDefaultTag(

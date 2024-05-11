@@ -15,7 +15,6 @@
 #include "esp/io/Json.h"
 
 namespace esp {
-using assets::AssetType;
 using core::managedContainers::ManagedObjectAccess;
 
 namespace metadata {
@@ -46,7 +45,8 @@ void StageAttributesManager::createDefaultPrimBasedAttributesTemplates() {
   this->undeletableObjectNames_.insert(std::move(tmpltHandle));
 }  // StageAttributesManager::createDefaultPrimBasedAttributesTemplates
 
-int StageAttributesManager::registerObjectFinalize(
+core::managedContainers::ManagedObjectPreregistration
+StageAttributesManager::preRegisterObjectFinalize(
     StageAttributes::ptr stageAttributes,
     const std::string& stageAttributesHandle,
     bool forceRegistration) {
@@ -55,7 +55,7 @@ int StageAttributesManager::registerObjectFinalize(
         << "Attributes template named `" << stageAttributesHandle
         << "` does not have a valid render asset handle specified, so "
            "StageAttributes registration is aborted.";
-    return ID_UNDEFINED;
+    return core::managedContainers::ManagedObjectPreregistration::Failed;
   }
 
   // Handles for rendering and collision assets
@@ -76,7 +76,7 @@ int StageAttributesManager::registerObjectFinalize(
     stageAttributes->setRenderAssetIsPrimitive(false);
   } else if (std::string::npos != stageAttributesHandle.find("NONE")) {
     // Render asset handle will be NONE as well - force type to be unknown
-    stageAttributes->setRenderAssetType(static_cast<int>(AssetType::UNKNOWN));
+    stageAttributes->setRenderAssetType(static_cast<int>(AssetType::Unknown));
     stageAttributes->setRenderAssetIsPrimitive(false);
   } else if (forceRegistration) {
     ESP_WARNING()
@@ -92,7 +92,7 @@ int StageAttributesManager::registerObjectFinalize(
         << stageAttributesHandle
         << "does not correspond to any existing file or primitive render "
            "asset, so StageAttributes registration is aborted.";
-    return ID_UNDEFINED;
+    return core::managedContainers::ManagedObjectPreregistration::Failed;
   }
 
   if (StageAttributesManager::isValidPrimitiveAttributes(
@@ -107,7 +107,7 @@ int StageAttributesManager::registerObjectFinalize(
   } else if (std::string::npos != stageAttributesHandle.find("NONE")) {
     // Collision asset handle will be NONE as well - force type to be unknown
     stageAttributes->setCollisionAssetType(
-        static_cast<int>(AssetType::UNKNOWN));
+        static_cast<int>(AssetType::Unknown));
     stageAttributes->setCollisionAssetIsPrimitive(false);
   } else {
     // Else, means no collision data specified, use specified render data
@@ -125,12 +125,8 @@ int StageAttributesManager::registerObjectFinalize(
   // Clear dirty flag from when asset handles are changed
   stageAttributes->setIsClean();
 
-  // adds template to library, and returns either the ID of the existing
-  // template referenced by stageAttributesHandle, or the next available ID
-  // if not found.
-  int stageTemplateID = this->addObjectToLibrary(std::move(stageAttributes),
-                                                 stageAttributesHandle);
-  return stageTemplateID;
+  return core::managedContainers::ManagedObjectPreregistration::Success;
+
 }  // StageAttributesManager::registerAttributesTemplate
 
 StageAttributes::ptr StageAttributesManager::createPrimBasedAttributesTemplate(
@@ -151,7 +147,7 @@ StageAttributes::ptr StageAttributesManager::createPrimBasedAttributesTemplate(
   stageAttributes->setMargin(0.0);
 
   // set render mesh handle
-  int primType = static_cast<int>(AssetType::PRIMITIVE);
+  int primType = static_cast<int>(AssetType::Primitive);
   stageAttributes->setRenderAssetType(primType);
   // set collision mesh/primitive handle and default for primitives to not use
   // mesh collisions
@@ -311,7 +307,7 @@ StageAttributes::ptr StageAttributesManager::initNewObjectInternal(
     // TODO : get rid of this once the hardcoded mesh-type handling is removed,
     // but for now force all semantic assets to be instance_mesh
     newAttributes->setSemanticAssetType(
-        static_cast<int>(AssetType::INSTANCE_MESH));
+        static_cast<int>(AssetType::InstanceMesh));
   }
   // set default physical quantities specified in physics manager attributes
   if (physicsAttributesManager_->getObjectLibHasHandle(
@@ -343,18 +339,18 @@ void StageAttributesManager::setDefaultAssetNameBasedAttributes(
   up = up1;
   fwd = fwd1;
   if (endsWith(fileName, "_semantic.ply")) {
-    assetTypeSetter(static_cast<int>(AssetType::INSTANCE_MESH));
+    assetTypeSetter(static_cast<int>(AssetType::InstanceMesh));
   } else if (endsWith(fileName, ".glb")) {
     // assumes MP3D glb with gravity = -Z
-    assetTypeSetter(static_cast<int>(AssetType::MP3D_MESH));
+    assetTypeSetter(static_cast<int>(AssetType::Mp3dMesh));
     // Create a coordinate for the mesh by rotating the default ESP
     // coordinate frame to -Z gravity
     up = up2;
     fwd = fwd2;
   } else if (StageAttributesManager::isValidPrimitiveAttributes(fileName)) {
-    assetTypeSetter(static_cast<int>(AssetType::PRIMITIVE));
+    assetTypeSetter(static_cast<int>(AssetType::Primitive));
   } else {
-    assetTypeSetter(static_cast<int>(AssetType::UNKNOWN));
+    assetTypeSetter(static_cast<int>(AssetType::Unknown));
   }
   if (setFrame) {
     attributes->setOrientUp(up);
@@ -423,13 +419,14 @@ void StageAttributesManager::setValsFromJSONDoc(
   // TODO eventually remove this, but currently semantic mesh must be
   // instance
   stageAttributes->setSemanticAssetType(
-      static_cast<int>(AssetType::INSTANCE_MESH));
+      static_cast<int>(AssetType::InstanceMesh));
 
   if (io::readMember<std::string>(jsonConfig, "nav_asset", navmeshFName)) {
     // if "nav mesh" is specified in stage json set value (override default).
     // navmesh filename might already be fully qualified; if not, might just be
     // file name
-    if (!Corrade::Utility::Path::exists(navmeshFName)) {
+    if (!Corrade::Utility::Path::exists(navmeshFName) &&
+        !navmeshFName.empty()) {
       navmeshFName = Cr::Utility::Path::join(stageLocFileDir, navmeshFName);
     }
     stageAttributes->setNavmeshAssetHandle(navmeshFName);
@@ -441,13 +438,13 @@ void StageAttributesManager::setValsFromJSONDoc(
     // (override default).
     // semanticSceneDescriptor filename might already be fully qualified; if
     // not, might just be file name
-    if (!Corrade::Utility::Path::exists(semanticSceneDescriptor)) {
+    if (!Corrade::Utility::Path::exists(semanticSceneDescriptor) &&
+        !semanticSceneDescriptor.empty()) {
       semanticSceneDescriptor =
           Cr::Utility::Path::join(stageLocFileDir, semanticSceneDescriptor);
     }
     stageAttributes->setSemanticDescriptorFilename(semanticSceneDescriptor);
   }
-
   // check for user defined attributes
   this->parseUserDefinedJsonVals(stageAttributes, jsonConfig);
 

@@ -20,6 +20,24 @@
 //! core simulator namespace
 namespace esp {
 
+// Faciliate enabling/disabling Function templates
+// Alias template enabling/disabling function templates based on some condition
+template <bool, typename T = void>
+struct EnableIfT {};
+
+template <typename T>
+struct EnableIfT<true, T> {
+  using Type = T;
+};
+
+// EnableIf expands to a type so this is implemented as an alias template
+// Cond is the condition for which the subsequent template should be executed,
+// and T is the type produced by the expression if Cond is met.
+// See esp::core::config::ConfigValue
+template <bool Cond, typename T = void>
+using EnableIf = typename EnableIfT<Cond, T>::Type;
+
+//
 // smart pointers macro
 #define ESP_SMART_POINTERS(...)                                         \
  public:                                                                \
@@ -81,6 +99,12 @@ constexpr int ID_UNDEFINED = -1;
 constexpr int RIGID_STAGE_ID = 0;
 
 static const double NO_TIME = 0.0;
+
+/**
+ * @brief loading an asset info with filepath == EMPTY_SCENE creates a scene
+ * graph with no scene mesh (ie. an empty scene)
+ */
+constexpr char EMPTY_SCENE[] = "NONE";
 
 /**
  * @brief The @ref esp::gfx::ShaderManager key for @ref esp::gfx::LightInfo

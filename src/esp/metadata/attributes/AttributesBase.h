@@ -12,9 +12,6 @@
 #include "esp/core/managedContainers/AbstractFileBasedManagedObject.h"
 
 namespace esp {
-namespace asset {
-enum class AssetType;
-}
 namespace metadata {
 /**
  * @brief A tag to search for in the default_attributes section of the Scene
@@ -26,20 +23,6 @@ constexpr char CONFIG_NAME_AS_ASSET_FILENAME[] =
     "%%CONFIG_NAME_AS_ASSET_FILENAME%%";
 
 namespace attributes {
-
-/**
- * @brief Constant static map to provide mappings from string tags to
- * @ref esp::assets::AssetType values.  This will be used to map values
- * set in json for mesh type to @ref esp::assets::AssetType.  Keys must
- * be lowercase.
- */
-const extern std::map<std::string, esp::assets::AssetType> AssetTypeNamesMap;
-
-/**
- * @brief Get a string name representing the specified @ref
- * esp::assets::AssetType enum value.
- */
-std::string getMeshTypeName(esp::assets::AssetType meshTypeEnum);
 
 /**
  * @brief Base class for all implemented attributes.  Inherits from @ref
@@ -80,7 +63,7 @@ class AbstractAttributes
 
   /**
    * @brief Set this attributes name/origin.  Some attributes derive their own
-   * names based on their state, such as @ref AbstractPrimitiveAttributes;  in
+   * names based on their state, such as @ref AbstractPrimitiveAttributes; in
    * such cases this should be overridden with NOP.
    * @param handle the handle to set.
    */
@@ -88,19 +71,44 @@ class AbstractAttributes
   std::string getHandle() const override { return get<std::string>("handle"); }
 
   /**
-   * @brief directory where files used to construct attributes can be found.
+   * @brief Set the directory where files used to construct ManagedObject can be
+   * found.
    */
   void setFileDirectory(const std::string& fileDirectory) override {
     set("fileDirectory", fileDirectory);
   }
+
+  /**
+   * @brief Get directory where files used to construct ManagedObject can be
+   * found.
+   */
   std::string getFileDirectory() const override {
     return get<std::string>("fileDirectory");
   }
 
   /**
-   *  @brief Unique ID referencing attributes
+   * @brief Set the fully qualified filename of the file used to create or most
+   * recently save this ManagedObject.
+   */
+  void setActualFilename(const std::string& fullFileName) override {
+    set("actualFilename", fullFileName);
+  }
+
+  /**
+   * @brief Get the fully qualified filename of the file used to create or most
+   * recently save this ManagedObject.
+   */
+  std::string getActualFilename() const override {
+    return get<std::string>("actualFilename");
+  }
+
+  /**
+   *  @brief Set the unique ID referencing attributes
    */
   void setID(int ID) override { set("ID", ID); }
+  /**
+   *  @brief Get the unique ID referencing attributes
+   */
   int getID() const override { return get<int>("ID"); }
 
   /**
@@ -129,6 +137,14 @@ class AbstractAttributes
    */
   int getNumUserDefinedConfigurations() const {
     return getSubconfigNumEntries("user_defined");
+  }
+
+  /**
+   * @brief Returns the number of user-defined values (within the "user-defined"
+   * sub-ConfigurationGroup) this attributes has.
+   */
+  int getTotalNumUserDefinedConfigurations() const {
+    return getSubconfigTreeNumEntries("user_defined");
   }
 
   /**
@@ -198,7 +214,7 @@ class AbstractAttributes
       const std::shared_ptr<Configuration>& subAttrConfig) const {
     int res = 0;
     if (subConfigNamePrefix.empty()) {
-      return subAttrConfig->getNumSubconfigEntries();
+      return subAttrConfig->getNumSubconfigs();
     }
     // iterator to subAttrConfig's subConfigs
     auto subAttrIter = subAttrConfig->getSubconfigIterator();
@@ -295,7 +311,7 @@ AbstractAttributes::getSubAttributesListInternal(
       "esp::metadata::AbstractAttributes");
   std::vector<std::shared_ptr<const T>> res{};
   // pair of begin/end const iters through subconfig of given name
-  int numSubconfigs = subAttrConfig->getNumSubconfigEntries();
+  int numSubconfigs = subAttrConfig->getNumSubconfigs();
   if (numSubconfigs == 0) {
     return {};
   }
@@ -387,15 +403,14 @@ void AbstractAttributes::setSubAttributesInternal(
       std::is_base_of<AbstractAttributes, T>::value,
       "AbstractAttributes : Desired subconfig type must be derived from "
       "esp::metadata::AbstractAttributes");
-  // get subconfig for articulated object instances, add this ao instance as a
   // set id
   if (!availableIDs.empty()) {
     // use saved value and then remove from storage
     objInst->setID(availableIDs.front());
     availableIDs.pop_front();
   } else {
-    // use size of container to set ID
-    objInst->setID(subAttrConfig->getNumSubconfigEntries());
+    // use current size of destination config to set ID
+    objInst->setID(subAttrConfig->getNumSubconfigs());
   }
   // get last key
   subAttrConfig->setSubconfigPtr<T>(
